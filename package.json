@@ -1,0 +1,19 @@
+{
+  "name": "terraterm",
+  "version": "0.2.0",
+  "private": true,
+  "description": "TERRATERM terminal UI: macro markets fused with physical-world intelligence.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/build.mjs && node test/acceptance.mjs && node test/audit-probes.mjs",
+    "serve": "node scripts/serve.mjs",
+    "test:audit": "node test/audit-probes.mjs"
+  },
+  "devDependencies": {
+    "axe-core": "^4.10.3",
+    "playwright": "^1.56.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

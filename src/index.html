@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TERRATERM</title>
+<meta name="description" content="Macro markets fused with physical-world intelligence: a keyboard-first terminal with satellite segmentation and an agent that reasons across both.">
+<meta name="color-scheme" content="dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; connect-src 'self' http: https:; font-src 'self'; object-src 'none'; base-uri 'self'">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app" aria-busy="true"></div>
+<noscript><p style="padding:16px">TERRATERM needs JavaScript.</p></noscript>
+<!-- Live backend: define window.TERRATERM = { api: { watchlist, macro, imagery, ask, ... }, mode: 'live', config: {...} }
+     in a script placed here, before the app scripts. See CONTRACT.md. Without it the scaffold backend runs. -->
+<script src="js/core.js"></script>
+<script src="js/mock/data.js"></script>
+<script src="js/mock/scenes.js"></script>
+<script src="js/mock/market.js"></script>
+<script src="js/mock/agent.js"></script>
+<script src="js/mock/api.js"></script>
+<script src="js/ui/imagery.js"></script>
+<script src="js/ui/charts.js"></script>
+<script src="js/ui/kit.js"></script>
+<script src="js/ui/state.js"></script>
+<script src="js/ui/orbital.js"></script>
+<script src="js/ui/agent.js"></script>
+<script src="js/ui/desk.js"></script>
+<script src="js/ui/views.js"></script>
+<script src="js/ui/palette.js"></script>
+<script src="js/ui/shell.js"></script>
+<script id="terraterm-boot">
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { TT.boot(); });
+  else TT.boot();
+</script>
+</body>
+</html>

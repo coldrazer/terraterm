@@ -1,0 +1,84 @@
+/* TERRATERM design tokens · blueprint §5
+   Layout: fixed frame (top 40 / function bar 32 / main grid / status 28), 3x2 desk grid with 1px gutters.
+   Dark only by decision (§19.1). Every color in the app reads from these tokens. */
+:root {
+  color-scheme: dark;
+
+  /* surfaces */
+  --bg: #0a0a0b;
+  --panel: #111113;
+  --raised: #161618;
+  --gutter: #232326;
+  --rule: #1a1a1d;
+  --imagery-bg: #060607;
+  --scrim: rgba(0, 0, 0, 0.62);
+  --hud-bg: rgba(10, 10, 11, 0.82);
+
+  /* text */
+  --text: #e8e6e1;
+  --text-2: #8a8a8e;
+
+  /* identity and semantics */
+  --amber: #ff9f1c;      /* brand, focus, action */
+  --amber-dim: #7a4d0e;
+  --amber-wash: rgba(255, 159, 28, 0.10);
+  --up: #00d97e;         /* price direction only */
+  --down: #ff4d5e;       /* price direction, alerts, feed down */
+  --info: #4da6ff;       /* info and links */
+  --geo: #2dd4bf;        /* physical world */
+  --up-flash: rgba(0, 217, 126, 0.12);
+  --down-flash: rgba(255, 77, 94, 0.12);
+  --user-bubble: #11233a;
+  --user-bubble-edge: #1d3a5e;
+  --on-amber: #0a0a0b;
+
+  /* segment classes §11 */
+  --cls-logistics: #2dd4bf;
+  --cls-energy: #ff9f1c;
+  --cls-maritime: #4da6ff;
+  --cls-industrial: #a78bfa;
+
+  /* chart series: muted, never green or red */
+  --s1: #e8e6e1;
+  --s2: #f4a259;
+  --s3: #b39dff;
+  --s4: #7cc4ff;
+  --s5: #5eead4;
+  --s6: #f9a8d4;
+
+  /* type */
+  --font-mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --fs-base: 12px;
+  --lh: 1.5;
+  --fs-title: 11px;
+  --fs-label: 10px;
+  --fs-tag: 9px;
+  --fs-tip: 11px;
+  --fs-kpi: 19px;
+  --track-title: 1.5px;
+
+  /* space and shape */
+  --u: 8px;
+  --pad: 10px;
+  --r-card: 6px;
+  --r-tag: 3px;
+  --r-bubble: 8px;
+
+  /* frame */
+  --h-top: 40px;
+  --h-fbar: 32px;
+  --h-tape: 22px;
+  --h-status: 28px;
+  --h-head: 34px;
+  --h-row: 22px;
+  --col-l: 300px;
+  --col-r: 340px;
+  --row-b: 220px;
+  --edge: max(16px, env(safe-area-inset-left, 0px));
+  --edge-r: max(16px, env(safe-area-inset-right, 0px));
+
+  /* motion */
+  --t-fast: 150ms;
+  --t-modal: 250ms;
+  --t-flash: 400ms;
+}
