@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// TERRATERM audit probes (2026-10-26). Offline regression checks for the defects found in the audit.
+// TERRATERM regression probes. Offline checks for previously fixed defects.
 // Each probe injects a backend (or uses the scaffold) and reports { bug: true|false }. Exit code 1 if any bug is present.
-//   node test/audit-probes.mjs                 (from the project root, after npm install)
-//   node test/audit-probes.mjs path/to/terraterm.html A_passIdCollision   (one probe)
+//   node test/regression.mjs                 (from the project root, after npm install)
+//   node test/regression.mjs path/to/terraterm.html A_passIdCollision   (one probe)
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { resolve, join } from 'node:path';
@@ -267,7 +267,7 @@ await run('M_nyseBeyond2028', async () => {
   return Object.assign(r, { bug: r.july4_2029 !== 'HOLIDAY' || r.goodFriday2029 !== 'HOLIDAY' || !/EARLY/.test(r.xmasEve2029_1630Z) || r.ordinary2029 !== 'OPEN' });
 });
 
-// N: fmt.tokens must not round sub-1000 counts up to 1K (audit L-5)
+// N: fmt.tokens must not round sub-1000 counts up to 1K 
 await run('N_tokensBelow1000', async () => {
   const { ctx, p } = await page(null, '#/desk');
   const r = await p.evaluate(() => ({ t999: TT.fmt.tokens(999), t500: TT.fmt.tokens(500), t184200: TT.fmt.tokens(184200) }));
@@ -275,7 +275,7 @@ await run('N_tokensBelow1000', async () => {
   return Object.assign(r, { bug: r.t999 !== '999' || r.t500 !== '500' || r.t184200 !== '184K' });
 });
 
-// O: closing an F5 chart drawer disconnects its ResizeObserver (audit M-1)
+// O: closing an F5 chart drawer disconnects its ResizeObserver 
 await run('O_drawerChartDestroy', async () => {
   const { ctx, p } = await page(null, '#/commodities/CLZ6');
   await p.waitForFunction(() => TT.ui.drawer() && TT.ui.drawer().kind === 'symbol');
@@ -288,7 +288,7 @@ await run('O_drawerChartDestroy', async () => {
   return Object.assign({ before, after }, { bug: !before.has || before.dead || !after.dead || !after.cleared });
 });
 
-// P: F1 macro chart exposes a text alternative with series values (audit M-4)
+// P: F1 macro chart exposes a text alternative with series values 
 await run('P_macroTextAlt', async () => {
   const { ctx, p } = await page(null, '#/macro');
   await p.waitForFunction(() => TT.views.macro && TT.views.macro.res);
@@ -298,7 +298,7 @@ await run('P_macroTextAlt', async () => {
   return Object.assign(r, { bug: !r.present || !/SPX/.test(r.text) || !/CL1/.test(r.text) });
 });
 
-// Q: document carries a Content-Security-Policy (audit M-3)
+// Q: document carries a Content-Security-Policy 
 await run('Q_cspPresent', async () => {
   const { ctx, p } = await page(null, '#/desk');
   const r = await p.evaluate(() => { const m = document.querySelector('meta[http-equiv="Content-Security-Policy"]'); return { csp: m ? m.getAttribute('content') : '' }; });
@@ -308,5 +308,5 @@ await run('Q_cspPresent', async () => {
 
 await browser.close();
 const bugs = Object.entries(out).filter(([, v]) => v && (v.bug || v.error)).map(([k]) => k);
-console.log('\n' + (bugs.length ? 'REGRESSIONS: ' + bugs.join(', ') : Object.keys(out).length + ' audit probes clean.'));
+console.log('\n' + (bugs.length ? 'REGRESSIONS: ' + bugs.join(', ') : Object.keys(out).length + ' regression probes clean.'));
 process.exit(bugs.length ? 1 : 0);

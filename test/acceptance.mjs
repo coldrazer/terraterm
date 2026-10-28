@@ -786,7 +786,7 @@ const askAndWait = async (page, text) => {
   });
 
   /* ===================== console ===================== */
-  /* ===================== Regression checks for the 2026-10-26 audit ===================== */
+  /* ===================== Regression checks ===================== */
   const LIVE_BASE = `
     const now = () => Date.now();
     const KS = ['SPX', 'CL1', 'HG1', 'US10Y', 'DXY', 'VIX'], SLOTS = ['Index', 'Commodity', 'Metal', 'Yield', 'Dollar', 'Vol'];

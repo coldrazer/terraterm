@@ -5,9 +5,9 @@
   "description": "TERRATERM terminal UI: macro markets fused with physical-world intelligence.",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node scripts/build.mjs && node test/acceptance.mjs && node test/audit-probes.mjs",
+    "test": "node scripts/build.mjs && node test/acceptance.mjs && node test/regression.mjs",
     "serve": "node scripts/serve.mjs",
-    "test:audit": "node test/audit-probes.mjs"
+    "test:regression": "node test/regression.mjs"
   },
   "devDependencies": {
     "axe-core": "^4.10.3",

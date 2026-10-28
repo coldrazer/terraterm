@@ -67,20 +67,20 @@ src/
 dist/terraterm.html     standalone build (open this one)
 dist/terraterm.artifact.html   body-only build for hosts that supply <html>/<head>
 test/acceptance.mjs     63 checks; writes test/out/report.json and report.md
-test/audit-probes.mjs   17 regression probes for audited defects (exit 1 on any regression)
+test/regression.mjs     17 regression probes (exit 1 on any regression)
 docs/                   DEMO.md (one-pager), COMPONENTS.md (per screen), backend.example.js, screenshots/
 ```
 
 Polling is budgeted (quotes 1 s, events 2 s, system 3 s, wire 5 s, sites 15 s, flow 30 s) with exponential backoff and a 4× slowdown while the tab is hidden. Imagery is cached per site/pass with rolling-window reconciliation; charts re-render at most twice per second.
 
-## Testing and audit
+## Testing
 
 ```bash
-npm test        # build + 63 acceptance checks + 17 audit probes
-npm run test:audit
+npm test        # build + 63 acceptance checks + 17 regression probes
+npm run test:regression
 ```
 
-Latest verified run: **63/63 acceptance + 17/17 probes, Chromium 156** (report in `test/out/`). A full end-to-end audit — architecture, security, accessibility, performance, contract compliance, and every fix applied afterward — is recorded in [audit_final.md](audit_final.md).
+Latest verified run: **63/63 acceptance + 17/17 probes, Chromium 156** (report in `test/out/`).
 
 ## License
 
