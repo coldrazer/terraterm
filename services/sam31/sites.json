@@ -1,0 +1,806 @@
+{
+  "_comment": [
+    "Site catalog for the TERRATERM SAM 3.1 service.",
+    "Each pass lists one image URL (a still) or several (a frame sequence).",
+    "TERRATERM requires 16:10 imagery: crop or pad to 1600x1000 on the server side.",
+    "gsd is metres per pixel, used to convert mask pixel area into area_m2."
+  ],
+  "sites": {
+    "cushing-ok-tanks": {
+      "name": "Cushing Tank Farm",
+      "short": "CUSHING",
+      "type": "Tank farm",
+      "region": "Cushing, OK",
+      "cls": "energy",
+      "sensor": "Sentinel-2",
+      "gsd": 10,
+      "threshold": 0.5,
+      "_liveNote": "Primary demo site for the hosted SAM 3.1 API. Add box [x1,y1,x2,y2] + point [x,y] per tank from the verified cluster crop before live calls; tanks without a box are skipped and reported, never guessed. El Segundo below stays MOCK.",
+      "prompts": [
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            45,
+            20,
+            85,
+            60
+          ],
+          "point": [
+            68,
+            32
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            100,
+            5,
+            140,
+            45
+          ],
+          "point": [
+            108,
+            30
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            155,
+            0,
+            195,
+            40
+          ],
+          "point": [
+            188,
+            30
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            210,
+            5,
+            250,
+            45
+          ],
+          "point": [
+            228,
+            35
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            260,
+            10,
+            300,
+            50
+          ],
+          "point": [
+            278,
+            38
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            15,
+            85,
+            55,
+            125
+          ],
+          "point": [
+            35,
+            68
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            70,
+            85,
+            110,
+            125
+          ],
+          "point": [
+            115,
+            78
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            125,
+            80,
+            165,
+            120
+          ],
+          "point": [
+            155,
+            80
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            180,
+            75,
+            220,
+            115
+          ],
+          "point": [
+            195,
+            82
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            0,
+            135,
+            40,
+            175
+          ],
+          "point": [
+            28,
+            155
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            60,
+            140,
+            100,
+            180
+          ],
+          "point": [
+            65,
+            155
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            115,
+            135,
+            155,
+            175
+          ],
+          "point": [
+            105,
+            160
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            170,
+            150,
+            210,
+            190
+          ],
+          "point": [
+            190,
+            215
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            30,
+            295,
+            80,
+            345
+          ],
+          "point": [
+            28,
+            205
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            95,
+            275,
+            135,
+            315
+          ],
+          "point": [
+            105,
+            340
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            160,
+            240,
+            200,
+            280
+          ],
+          "point": [
+            165,
+            260
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            215,
+            260,
+            255,
+            300
+          ],
+          "point": [
+            240,
+            215
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            180,
+            315,
+            230,
+            365
+          ],
+          "point": [
+            180,
+            340
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            640,
+            105,
+            680,
+            145
+          ],
+          "point": [
+            235,
+            105
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            695,
+            105,
+            735,
+            145
+          ],
+          "point": [
+            705,
+            125
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            750,
+            105,
+            790,
+            145
+          ],
+          "point": [
+            745,
+            125
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            640,
+            155,
+            680,
+            195
+          ],
+          "point": [
+            140,
+            205
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            695,
+            155,
+            735,
+            195
+          ],
+          "point": [
+            705,
+            175
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            750,
+            155,
+            790,
+            195
+          ],
+          "point": [
+            745,
+            175
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            820,
+            10,
+            860,
+            50
+          ],
+          "point": [
+            850,
+            28
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            870,
+            10,
+            910,
+            50
+          ],
+          "point": [
+            890,
+            28
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            915,
+            10,
+            955,
+            50
+          ],
+          "point": [
+            930,
+            28
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            820,
+            50,
+            860,
+            90
+          ],
+          "point": [
+            850,
+            68
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            870,
+            50,
+            910,
+            90
+          ],
+          "point": [
+            890,
+            68
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            915,
+            50,
+            955,
+            90
+          ],
+          "point": [
+            930,
+            68
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            820,
+            90,
+            860,
+            130
+          ],
+          "point": [
+            850,
+            112
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            870,
+            90,
+            910,
+            130
+          ],
+          "point": [
+            890,
+            112
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            915,
+            90,
+            955,
+            130
+          ],
+          "point": [
+            930,
+            115
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            820,
+            135,
+            860,
+            175
+          ],
+          "point": [
+            850,
+            160
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            870,
+            135,
+            910,
+            175
+          ],
+          "point": [
+            890,
+            160
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            915,
+            135,
+            955,
+            175
+          ],
+          "point": [
+            925,
+            160
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            820,
+            180,
+            860,
+            220
+          ],
+          "point": [
+            148,
+            30
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            870,
+            180,
+            910,
+            220
+          ],
+          "point": [
+            890,
+            205
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            915,
+            180,
+            955,
+            220
+          ],
+          "point": [
+            930,
+            205
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            820,
+            220,
+            860,
+            260
+          ],
+          "point": [
+            75,
+            68
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            870,
+            220,
+            910,
+            260
+          ],
+          "point": [
+            890.0,
+            240.0
+          ],
+          "pointSource": "box center (no matching center)"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            95,
+            425,
+            125,
+            455
+          ],
+          "point": [
+            105,
+            445
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            95,
+            485,
+            125,
+            515
+          ],
+          "point": [
+            105,
+            505
+          ],
+          "pointSource": "nearest center"
+        },
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK",
+          "box": [
+            0,
+            540,
+            30,
+            570
+          ],
+          "point": [
+            60,
+            195
+          ],
+          "pointSource": "nearest center"
+        }
+      ],
+      "passes": [
+        {
+          "id": "p-cushing-s2-01",
+          "ts": 1790000000000,
+          "images": [
+            "/Users/coldrazer/Downloads/cushing-tile.jpg"
+          ]
+        }
+      ],
+      "_coordSpace": "0-1000 normalized coordinates from cushing cluster crop (sam-batch-cluster-prompts.md); point = nearest verified center, else box center"
+    },
+    "ela-segundo-tanks": {
+      "name": "El Segundo Tank Farm",
+      "short": "EL SEGUNDO",
+      "type": "Tank farm",
+      "region": "Los Angeles, CA",
+      "cls": "energy",
+      "sensor": "SAT VHR",
+      "gsd": 0.5,
+      "threshold": 0.5,
+      "prompts": [
+        {
+          "text": "storage tank",
+          "cls": "energy",
+          "label": "TK"
+        },
+        {
+          "text": "storage tank farm",
+          "cls": "energy",
+          "label": "TANK FARM"
+        }
+      ],
+      "passes": [
+        {
+          "id": "p-2026-10-27-0640",
+          "ts": 1790000000000,
+          "images": [
+            "https://example.invalid/imagery/ela-segundo/2026-10-27T0640.jpg"
+          ]
+        },
+        {
+          "id": "p-2026-10-28-0640",
+          "ts": 1790086400000,
+          "images": [
+            "https://example.invalid/imagery/ela-segundo/2026-10-28T0640.jpg"
+          ]
+        }
+      ]
+    },
+    "san-pedro-port": {
+      "name": "San Pedro Bay Container Port",
+      "short": "SAN PEDRO BAY",
+      "type": "Port",
+      "region": "Long Beach, CA",
+      "cls": "maritime",
+      "sensor": "SAT VHR",
+      "gsd": 1.5,
+      "threshold": 0.55,
+      "prompts": [
+        {
+          "text": "cargo ship",
+          "cls": "maritime",
+          "label": "VESSEL"
+        },
+        {
+          "text": "container crane",
+          "cls": "logistics",
+          "label": "CRANE"
+        }
+      ],
+      "passes": [
+        {
+          "id": "p-2026-10-26-1120",
+          "ts": 1789826400000,
+          "images": [
+            "https://example.invalid/imagery/san-pedro/2026-10-26T1120.jpg"
+          ]
+        }
+      ]
+    }
+  }
+}
