@@ -15,5 +15,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "@meta-sam/parser": "0.1.0"
   }
 }

@@ -35,13 +35,14 @@
     const modelSb = H('span', { class: 'sb sb-opt' }, '');
     const ctxSb = H('span', { class: 'sb' }, 'CTX ', H('span', { class: 'ctx-mini' }, H('i', { style: { width: '0%' } })), H('b', null, '—'));
     const alertSb = H('button', { class: 'sb', type: 'button', onclick: () => TT.router.go('alerts') }, 'ALERTS ', H('b', null, '0'));
+    const settingsSb = H('button', { class: 'sb', type: 'button', 'data-tip': 'API keys and backend', onclick: () => { if (TT.settings) TT.settings.open(); } }, 'SETTINGS');
     const demoSb = H('span', { class: 'sb amber', hidden: true });
     const modeSb = H('span', { class: 'sb sb-mode' + (app.mode === 'scaffold' ? ' amber' : '') }, app.mode.toUpperCase());
     const hints = H('span', { class: 'sb-hints' }, H('span', null, H('kbd', null, '/'), ' CMD'), H('span', null, H('kbd', null, '?'), ' KEYS'), H('span', null, H('kbd', null, 'F1–F8'), ' VIEWS'), modeSb, H('span', null, 'v' + TT.VERSION));
-    const status = H('footer', { class: 'status' }, feedSb, modelSb, ctxSb, alertSb, demoSb, hints);
+    const status = H('footer', { class: 'status' }, feedSb, modelSb, ctxSb, alertSb, settingsSb, demoSb, hints);
     feedSb.addEventListener('click', () => { if (app.feed.status !== 'live') app.retryFeed(); });
     root.append(top, fbar, tape, main, status);
-    shell.el = { mkt: mkt, models: models, clock: clock, links: links, tape: tape, tapeTrack: tapeTrack, main: main, views: views, feedSb: feedSb, modelSb: modelSb, ctxSb: ctxSb, alertSb: alertSb, demoSb: demoSb, demoBadge: demoBadge, modeSb: modeSb };
+    shell.el = { mkt: mkt, models: models, clock: clock, links: links, tape: tape, tapeTrack: tapeTrack, main: main, views: views, feedSb: feedSb, modelSb: modelSb, ctxSb: ctxSb, alertSb: alertSb, settingsSb: settingsSb, demoSb: demoSb, demoBadge: demoBadge, modeSb: modeSb };
   }
 
   function tickClock() {

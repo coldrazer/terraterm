@@ -242,6 +242,9 @@ it only has to return masks, scores and boxes.
 | `services/sam31/test_service.py` | contract test: fake SAM, real geometry, asserts the `Segment` shape |
 | `services/sam31/test_e2e.mjs` | browser test: mock service → adapter → orbital view renders the polygons |
 | `docs/sam31.adapter.js` | `window.TERRATERM.api` adapter wiring the service into the UI |
+| `services/sam31/settings_store.py` | local settings: env-over-file resolution, gitignored settings.local.json (0600), status without secret values |
+| `services/sam31/parse_sam.mjs` | token-grammar output through the official @meta-sam/parser (mask to SVG path) |
+| `src/js/ui/settings.js` | Settings panel: API keys, backend mode, per-provider tests, service URL |
 
 ### Developing without a GPU
 
@@ -269,3 +272,38 @@ the payload against `CONTRACT.md`: segment shape, normalized polygon coordinates
 drives the orbital view in Chromium — it asserts the polygons render and writes
 `services/sam31/out/e2e-orbital.png`.
 
+
+## 8. Settings page: API keys and backend config
+
+The app has a SETTINGS button in the status footer (`src/js/ui/settings.js`).
+It talks to the SAM service's Settings API and covers everything the app
+needs to run live:
+
+| Provider | What it powers | Settings fields |
+|---|---|---|
+| Meta Model API (SAM 3.1) | tank segmentation from imagery | API key, base URL |
+| EIA | weekly Cushing crude stocks | API key, series (default W_EPC0_SAX_YCUOK_MBBL) |
+| Copernicus Data Space | Sentinel-2 tiles | username, password |
+| Baseten Muse Spark | agent chat only (never segmentation) | API key, base URL, model |
+| Backend | mock vs hosted API | mock (default, no calls) or api |
+
+Key handling rules:
+
+- Keys come from environment variables or from `settings.local.json` next
+  to `server.py`. Environment wins. The file is gitignored and written
+  mode 0600.
+- The repo ships with no key values. After pulling on a new machine, open
+  Settings, paste the keys, save. Test buttons verify a key without saving
+  it; an empty key field on Save leaves the saved value unchanged.
+- The Settings API never returns, logs, or echoes a key value: `GET
+  /api/settings` reports booleans (configured/missing, env/file) plus
+  non-secret config only.
+- Backend mode applies immediately: the service reads the effective mode
+  per call, so switching mock/api in Settings needs no restart.
+
+Mask decoding (token-grammar output) runs through Meta's official parser:
+`services/sam31/parse_sam.mjs` calls `@meta-sam/parser`, declared in the
+root `package.json`, so `npm install` at the repo root is required for
+live API segmentation. If node or the package is missing, the API path
+fails visibly (HTTP 502) instead of substituting mock segments; the
+Settings page reports parser readiness.

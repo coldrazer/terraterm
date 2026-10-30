@@ -108,10 +108,10 @@
             125
           ],
           "point": [
-            35,
-            68
+            35.0,
+            105.0
           ],
-          "pointSource": "nearest center"
+          "pointSource": "box center"
         },
         {
           "text": "storage tank",
@@ -124,10 +124,10 @@
             125
           ],
           "point": [
-            115,
-            78
+            90.0,
+            105.0
           ],
-          "pointSource": "nearest center"
+          "pointSource": "box center"
         },
         {
           "text": "storage tank",
@@ -204,10 +204,10 @@
             175
           ],
           "point": [
-            105,
-            160
+            135.0,
+            155.0
           ],
-          "pointSource": "nearest center"
+          "pointSource": "box center"
         },
         {
           "text": "storage tank",
@@ -220,10 +220,10 @@
             190
           ],
           "point": [
-            190,
-            215
+            190.0,
+            170.0
           ],
-          "pointSource": "nearest center"
+          "pointSource": "box center"
         },
         {
           "text": "storage tank",
@@ -236,10 +236,10 @@
             345
           ],
           "point": [
-            28,
-            205
+            55.0,
+            320.0
           ],
-          "pointSource": "nearest center"
+          "pointSource": "box center"
         },
         {
           "text": "storage tank",
@@ -252,10 +252,10 @@
             315
           ],
           "point": [
-            105,
-            340
+            115.0,
+            295.0
           ],
-          "pointSource": "nearest center"
+          "pointSource": "box center"
         },
         {
           "text": "storage tank",
@@ -284,10 +284,10 @@
             300
           ],
           "point": [
-            240,
-            215
+            235.0,
+            280.0
           ],
-          "pointSource": "nearest center"
+          "pointSource": "box center"
         },
         {
           "text": "storage tank",
@@ -316,10 +316,10 @@
             145
           ],
           "point": [
-            235,
-            105
+            660.0,
+            125.0
           ],
-          "pointSource": "nearest center"
+          "pointSource": "box center"
         },
         {
           "text": "storage tank",
@@ -348,10 +348,10 @@
             145
           ],
           "point": [
-            745,
-            125
+            770.0,
+            125.0
           ],
-          "pointSource": "nearest center"
+          "pointSource": "box center"
         },
         {
           "text": "storage tank",
@@ -364,10 +364,10 @@
             195
           ],
           "point": [
-            140,
-            205
+            660.0,
+            175.0
           ],
-          "pointSource": "nearest center"
+          "pointSource": "box center"
         },
         {
           "text": "storage tank",
@@ -396,10 +396,10 @@
             195
           ],
           "point": [
-            745,
-            175
+            770.0,
+            175.0
           ],
-          "pointSource": "nearest center"
+          "pointSource": "box center"
         },
         {
           "text": "storage tank",
@@ -604,10 +604,10 @@
             220
           ],
           "point": [
-            148,
-            30
+            840.0,
+            200.0
           ],
-          "pointSource": "nearest center"
+          "pointSource": "box center"
         },
         {
           "text": "storage tank",
@@ -652,10 +652,10 @@
             260
           ],
           "point": [
-            75,
-            68
+            840.0,
+            240.0
           ],
-          "pointSource": "nearest center"
+          "pointSource": "box center"
         },
         {
           "text": "storage tank",
@@ -716,10 +716,10 @@
             570
           ],
           "point": [
-            60,
-            195
+            15.0,
+            555.0
           ],
-          "pointSource": "nearest center"
+          "pointSource": "box center"
         }
       ],
       "passes": [
@@ -731,7 +731,7 @@
           ]
         }
       ],
-      "_coordSpace": "0-1000 normalized coordinates from cushing cluster crop (sam-batch-cluster-prompts.md); point = nearest verified center, else box center"
+      "_coordSpace": "0-1000 normalized coordinates from cushing cluster crop (sam-batch-cluster-prompts.md); point = nearest verified center, else box center; 2026-10-29 correction: every point now falls inside its box (box center used where the paired center fell outside the box)"
     },
     "ela-segundo-tanks": {
       "name": "El Segundo Tank Farm",

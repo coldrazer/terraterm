@@ -526,3 +526,16 @@ button.kpi:hover { background: var(--raised); }
   .site-card canvas { width: 120px; height: 75px; }
   .drawer { width: 100%; }
 }
+
+/* Settings panel (settings.js modal) */
+.set-row { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.set-row .input, .set-row select { width: 100%; }
+.set-lab { font-size: var(--fs-tag); letter-spacing: 1px; text-transform: uppercase; color: var(--text-2); font-weight: 700; }
+.set-sec { border-top: 1px solid var(--rule); padding-top: 8px; margin-top: 12px; }
+.set-sec h3 { margin: 0 0 4px; font-size: var(--fs-title); letter-spacing: 1px; }
+.set-line { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+.set-status { color: var(--text-2); }
+.set-ok { color: var(--up); }
+.set-bad { color: var(--down); }
+.set-note { color: var(--text-2); font-size: var(--fs-tag); line-height: 1.5; }
+.set-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }

@@ -283,7 +283,7 @@ _site_with_box = {
 }
 _prompts, _skipped = api_client.build_prompts_for_site(_site_with_box)
 check(len(_prompts) == 1 and len(_skipped) == 0, "api: tank with box yields one prompt, none skipped")
-check("box [10, 20, 110, 120]" in _prompts[0]["text"] and "(60, 70)" in _prompts[0]["text"], "api: prompt encodes box plus point")
+check("<|box;x1=10;y1=20;x2=110;y2=120;w=1000;h=1000|>" in _prompts[0]["text"] and "<|point;x=60;y=70;w=1000;h=1000|>" in _prompts[0]["text"], "api: prompt encodes box plus point in token grammar")
 check(_prompts[0]["text"] != "storage tank", "api: prompt is not a bare noun phrase")
 
 _no_box_prompts, _no_box_skipped = api_client.build_prompts_for_site({"prompts": [{"text": "storage tank", "label": "TK"}]})
@@ -293,7 +293,7 @@ _out = api_client.call_responses_api(_prompts[0]["text"], "data:image/jpeg;base6
 check(captured["url"] == "https://api.meta.ai/v1/responses", "api: endpoint is {base}/responses")
 check(captured["body"]["model"] == "sam-3.1", "api: model id is sam-3.1 exactly")
 check(captured["body"]["stream"] is False, "api: stream is false")
-check(captured["body"]["metadata"] == {"include_confidence": True}, "api: metadata asks for confidence")
+check(captured["body"]["metadata"] == {"include_confidence": "true"}, "api: metadata asks for confidence as string")
 _in = captured["body"]["input"][0]
 check(_in["type"] == "message" and _in["role"] == "user", "api: input is a user message")
 check(_in["content"][0]["type"] == "input_text" and _in["content"][1]["type"] == "input_image", "api: content is input_text + input_image")
@@ -324,6 +324,60 @@ except api_client.SamApiError as exc:
     check("500" in str(exc), "api: HTTP failure raises visibly with status")
 
 check("test-key-not-real" not in json_module.dumps(captured["body"]), "api: key never appears in request body/logs")
+
+# --------------------------------------------------------------------------
+print("\n[10] token grammar prompts, token output parsing, settings store")
+# --------------------------------------------------------------------------
+check(
+    api_client.build_prompt_text([10, 20, 110, 120], [60, 70], 700, 500)
+    == "<0f>1<|box;x1=7;y1=10;x2=77;y2=60;w=700;h=500|><|point;x=42;y=35;w=700;h=500|>",
+    "api: 0-1000 coords convert to image pixels in the prompt",
+)
+
+_fake_records = [
+    {"bounds": {"left": 10, "top": 20, "right": 110, "bottom": 120}, "confidence": 0.7,
+     "svg": "M10,10 L110,10 L110,110 L10,110 Z"}
+]
+_orig_decode = api_client._decode_output_via_node
+api_client._decode_output_via_node = lambda text: _fake_records
+_tok = api_client.parse_output_text(
+    "<0f>1<|box;x1=10;y1=20;x2=110;y2=120;w=1000;h=1000|><|mask;x=0;y=0;data=100,100,AAAA|>",
+    1000, 1000, 10,
+)
+api_client._decode_output_via_node = _orig_decode
+check(len(_tok) == 1 and abs(_tok[0]["confidence"] - 0.7) < 1e-9, "api: token output yields one detection with box confidence")
+check(_tok[0]["box"] == [10, 20, 109, 119], "api: token output box is inclusive (right/bottom minus one)")
+check(_tok[0]["area_m2"] == 100 * 100 * 10 * 10, "api: token output area = mask area x gsd^2")
+
+_rings = api_client._parse_svg_path("M0,0 H100 V100 H0 Z")
+check(len(_rings) == 1 and _rings[0][0] == [0.0, 0.0] and len(_rings[0]) == 5, "api: SVG path closes into one ring")
+
+import settings_store  # noqa: E402
+
+_tmp_settings = Path(tempfile.mkdtemp()) / "settings.local.json"
+settings_store.SETTINGS_PATH = _tmp_settings
+settings_store._cache = {"mtime": None, "data": {}}
+_st = settings_store.set_many({"baseten_api_key": "baseten-test-value"})
+check(_st["providers"]["baseten"]["configured"] is True, "settings: saved key reports configured")
+check(_st["providers"]["baseten"]["source"] == "file", "settings: saved key reports file source")
+check("baseten-test-value" not in json_module.dumps(_st), "settings: status never carries the key value")
+check(settings_store.get_secret("baseten_api_key") == "baseten-test-value", "settings: key resolves from file")
+
+check((_tmp_settings.stat().st_mode & 0o777) == 0o600, "settings: file is written mode 0600")
+os.environ["BASETEN_API_KEY"] = "env-wins-value"
+check(settings_store.get_secret("baseten_api_key") == "env-wins-value", "settings: env wins over file")
+del os.environ["BASETEN_API_KEY"]
+check(settings_store.get_secret("baseten_api_key") == "baseten-test-value", "settings: file value returns after env removal")
+settings_store.set_many({"baseten_api_key": ""})
+check(settings_store.get_secret("baseten_api_key") == "", "settings: empty string clears the key")
+settings_store.set_many({"bogus_key": "x"})
+check("bogus_key" not in _tmp_settings.read_text(), "settings: unknown keys are ignored")
+try:
+    settings_store.set_many({"sam_backend": "bogus"})
+    check(False, "settings: bad backend is rejected")
+except ValueError:
+    check(True, "settings: bad backend is rejected")
+_tmp_settings.unlink(missing_ok=True)
 
 print("\n" + ("ALL CHECKS PASSED" if not failures else f"{len(failures)} FAILURE(S): " + "; ".join(failures)))
 sys.exit(1 if failures else 0)

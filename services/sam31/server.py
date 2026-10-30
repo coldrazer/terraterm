@@ -21,6 +21,9 @@ Endpoints
     GET  /imagery/{site}      TERRATERM imagery() payload (site, passes, pass, prior)
     GET  /system              TERRATERM system() payload (model provenance for the HUD)
     POST /segment             raw segmentation for a list of image URLs
+    GET  /api/settings        settings status (booleans + non-secret config only)
+    POST /api/settings        save settings to settings.local.json (gitignored, 0600)
+    POST /api/settings/test   verify one provider key without storing it
 """
 
 from __future__ import annotations
@@ -43,6 +46,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+try:
+    import settings_store
+except ImportError:  # service run without its own dir on sys.path
+    settings_store = None
+
 HERE = Path(__file__).resolve().parent
 CATALOG_PATH = Path(os.environ.get("TERRATERM_SITES", HERE / "sites.json"))
 
@@ -58,7 +66,20 @@ API_MODEL_NAME = "SAM 3.1 (Meta Model API)"
 # Backend selection: "mock" (default, local/fake predictor, never spends API
 # calls) or "api" (hosted Meta Model API via api_client). UI work must never
 # accidentally spend calls or show mock data as live, hence mock by default.
-SAM31_BACKEND = os.environ.get("SAM31_BACKEND", "mock").strip().lower()
+def backend_mode() -> str:
+    """Effective SAM backend: env SAM31_BACKEND, then Settings file, else mock.
+
+    Read per call so a Settings save applies without restarting the service.
+    """
+    env_val = os.environ.get("SAM31_BACKEND", "").strip().lower()
+    if env_val:
+        return env_val
+    if settings_store is not None:
+        try:
+            return settings_store.get("sam_backend")
+        except Exception:
+            pass
+    return "mock"
 DEFAULT_THRESHOLD = float(os.environ.get("SAM31_THRESHOLD", "0.5"))
 MAX_POLY_POINTS = int(os.environ.get("SAM31_MAX_POLY_POINTS", "48"))
 MATCH_IOU = float(os.environ.get("SAM31_MATCH_IOU", "0.30"))
@@ -468,7 +489,7 @@ def _api_segments(site_id: str, site: Dict[str, Any], urls: List[str], gsd: floa
 
 def segment_pass(site_id: str, site: Dict[str, Any], pass_meta: Dict[str, Any]) -> Dict[str, Any]:
     """Run (or reuse) segmentation for one pass and return its TERRATERM Pass."""
-    key = f"{site_id}|{pass_meta['id']}|{SAM31_BACKEND}"
+    key = f"{site_id}|{pass_meta['id']}|{backend_mode()}"
     cached = cache_get(key)
     if cached:
         return cached
@@ -486,10 +507,10 @@ def segment_pass(site_id: str, site: Dict[str, Any], pass_meta: Dict[str, Any]) 
     sweep_frames()
     frame_dir = FRAME_STORE / site_id / str(pass_meta["id"])
     frame_paths, sizes_list = stage_frames(urls, frame_dir)
-    if SAM31_BACKEND == "api":
+    if backend_mode() == "api":
         segments = _api_segments(site_id, site, urls, gsd, sizes_list)
         model_label = API_MODEL_NAME
-    elif SAM31_BACKEND == "mock":
+    elif backend_mode() == "mock":
         per_frame = run_sam31(frame_paths, prompt_specs, threshold)
         sizes = {i: s for i, s in enumerate(sizes_list)}
         segments = []
@@ -497,7 +518,7 @@ def segment_pass(site_id: str, site: Dict[str, Any], pass_meta: Dict[str, Any]) 
             segments.extend(build_segments(site_id, site, prompt_specs, per_frame, fi, gsd, threshold, sizes))
         model_label = MODEL_NAME
     else:
-        raise HTTPException(status_code=500, detail=f"unknown SAM31_BACKEND: {SAM31_BACKEND} (expected api or mock)")
+        raise HTTPException(status_code=500, detail=f"unknown SAM31_BACKEND: {backend_mode()} (expected api or mock)")
 
     payload = {
         "id": pass_meta["id"],
@@ -554,7 +575,7 @@ class SegmentRequest(BaseModel):
 @app.get("/health")
 def health() -> Dict[str, Any]:
     loaded = _predictor is not None
-    if SAM31_BACKEND == "api":
+    if backend_mode() == "api":
         return {
             "ok": not _predictor_error,
             "model": API_MODEL_NAME,
@@ -568,7 +589,7 @@ def health() -> Dict[str, Any]:
         "ok": loaded and not _predictor_error,
         "model": MODEL_NAME,
         "checkpoint": MODEL_VERSION,
-        "backend": SAM31_BACKEND,
+        "backend": backend_mode(),
         "loaded": loaded,
         "error": _predictor_error,
         "threshold": DEFAULT_THRESHOLD,
@@ -598,7 +619,7 @@ def segment(req: SegmentRequest) -> Dict[str, Any]:
     workdir = Path(tempfile.mkdtemp(prefix="sam31-"))
     try:
         frame_paths, sizes_list = stage_frames(req.images, workdir)
-        if SAM31_BACKEND == "api":
+        if backend_mode() == "api":
             site_like = {"prompts": specs, "gsd": req.gsd}
             frames_out = []
             for fi, url in enumerate(req.images):
@@ -758,3 +779,126 @@ def system() -> Dict[str, Any]:
         "context": {"used": 0, "max": 0},
         "sourcesFused": 1,
     }
+
+
+# ---------------------------------------------------------------------------
+# Settings API: keys + config for the app's Settings page.
+# Secrets are never returned, logged, or echoed. Test calls use the value
+# transiently and never store it; save calls write settings.local.json
+# (gitignored, mode 0600). The repo ships with no values.
+# ---------------------------------------------------------------------------
+
+
+class SettingsSave(BaseModel):
+    sam_api_key: Optional[str] = None
+    sam_base_url: Optional[str] = None
+    sam_backend: Optional[str] = None
+    eia_api_key: Optional[str] = None
+    eia_series: Optional[str] = None
+    copernicus_user: Optional[str] = None
+    copernicus_password: Optional[str] = None
+    baseten_api_key: Optional[str] = None
+    baseten_base_url: Optional[str] = None
+    baseten_model: Optional[str] = None
+
+
+class SettingsTest(BaseModel):
+    provider: str
+    key: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+
+
+def _require_store() -> Any:
+    if settings_store is None:
+        raise HTTPException(status_code=500, detail="settings store unavailable")
+    return settings_store
+
+
+@app.get("/api/settings")
+def api_settings() -> Dict[str, Any]:
+    """Settings status: booleans + non-secret config. No secret values, ever."""
+    return _require_store().status()
+
+
+@app.post("/api/settings")
+def api_settings_save(body: SettingsSave) -> Dict[str, Any]:
+    """Save a partial update. Absent keys are unchanged; '' clears a key."""
+    store = _require_store()
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    try:
+        return store.set_many(updates)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+@app.post("/api/settings/test")
+def api_settings_test(body: SettingsTest) -> Dict[str, Any]:
+    """Verify one provider's key. Uses the value transiently; never stores it."""
+    store = _require_store()
+    provider = (body.provider or "").strip().lower()
+    timeout = 30
+    if provider == "sam":
+        key = (body.key or "").strip() or store.get_secret("sam_api_key")
+        if not key:
+            raise HTTPException(status_code=409, detail="SAM key is not configured")
+        base = store.get("sam_base_url").rstrip("/")
+        try:
+            res = requests.get(f"{base}/models", headers={"Authorization": f"Bearer {key}"}, timeout=timeout)
+        except Exception as exc:
+            return {"provider": provider, "ok": False, "detail": f"request failed: {type(exc).__name__}"}
+        if res.status_code != 200:
+            return {"provider": provider, "ok": False, "detail": f"HTTP {res.status_code}"}
+        try:
+            ids = [m.get("id", "") for m in res.json().get("data", [])]
+        except Exception:
+            ids = []
+        listed = "sam-3.1" in ids
+        return {"provider": provider, "ok": True, "detail": "connected; sam-3.1 listed" if listed else "connected; sam-3.1 not in model list"}
+    if provider == "eia":
+        key = (body.key or "").strip() or store.get_secret("eia_api_key")
+        if not key:
+            raise HTTPException(status_code=409, detail="EIA key is not configured")
+        series = store.get("eia_series")
+        url = ("https://api.eia.gov/v2/petroleum/stoc/wstk/data/?api_key=" + key
+               + "&facets[series][]=" + series + "&length=1")
+        try:
+            res = requests.get(url, timeout=timeout)
+        except Exception as exc:
+            return {"provider": provider, "ok": False, "detail": f"request failed: {type(exc).__name__}"}
+        if res.status_code != 200:
+            return {"provider": provider, "ok": False, "detail": f"HTTP {res.status_code}"}
+        try:
+            rows = res.json().get("response", {}).get("data", [])
+        except Exception:
+            rows = []
+        return {"provider": provider, "ok": bool(rows), "detail": f"series {series} returned data" if rows else f"series {series} returned no rows"}
+    if provider == "copernicus":
+        user = (body.username or "").strip() or store.get("copernicus_user")
+        pw = (body.password or "").strip() or store.get_secret("copernicus_password")
+        if not user or not pw:
+            raise HTTPException(status_code=409, detail="Copernicus user/password are not configured")
+        try:
+            res = requests.post(
+                "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token",
+                data={"grant_type": "password", "client_id": "cdse-public", "username": user, "password": pw},
+                timeout=timeout,
+            )
+        except Exception as exc:
+            return {"provider": provider, "ok": False, "detail": f"request failed: {type(exc).__name__}"}
+        if res.status_code != 200:
+            return {"provider": provider, "ok": False, "detail": f"HTTP {res.status_code}"}
+        return {"provider": provider, "ok": True, "detail": "credentials accepted (token not stored)"}
+    if provider == "baseten":
+        key = (body.key or "").strip() or store.get_secret("baseten_api_key")
+        if not key:
+            raise HTTPException(status_code=409, detail="Baseten key is not configured")
+        base = store.get("baseten_base_url").rstrip("/")
+        try:
+            res = requests.get(f"{base}/models", headers={"Authorization": f"Api-Key {key}"}, timeout=timeout)
+        except Exception as exc:
+            return {"provider": provider, "ok": False, "detail": f"request failed: {type(exc).__name__}"}
+        if res.status_code != 200:
+            return {"provider": provider, "ok": False, "detail": f"HTTP {res.status_code}"}
+        return {"provider": provider, "ok": True, "detail": "connected"}
+    raise HTTPException(status_code=400, detail=f"unknown provider: {provider} (expected sam, eia, copernicus, baseten)")
