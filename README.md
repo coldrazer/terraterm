@@ -1,10 +1,10 @@
 # TERRATERM
 
-> The terminal Wall Street knows, pointed at the physical world.
+> See the oil market and the oil itself, in one place.
 
-Macro markets on the left, segmented satellite imagery in the center, and an agent that reasons across both on the right. Keyboard-first, dark, single-file, and offline by default.
+TERRATERM follows crude oil two ways at once. It tracks prices and market news, and it watches the big storage yard at Cushing, Oklahoma from satellite photos, spotting each tank and measuring the area it covers. It lines that up with the weekly government inventory report, so you can check what the market says against what is physically sitting in the yard. An agent answers questions across both sides and shows its sources. Everything runs from the keyboard, in one dark screen, with no install.
 
-Built with Meta AI tooling: Muse Wonder for the model, SAM 3.1 for tank segmentation, and Muse Spark for audit and verification.
+Built with Meta AI tooling: Muse Wonder for the model, SAM 3.1 for spotting tanks, and Muse Spark for checking the work.
 
 ![License: Proprietary](https://img.shields.io/badge/license-proprietary-red) ![Version](https://img.shields.io/badge/version-0.2.0-amber) ![Tests](https://img.shields.io/badge/tests-63%2F63%20%2B%2017%2F17-brightgreen) ![Dependencies](https://img.shields.io/badge/runtime%20dependencies-0-blue)
 
