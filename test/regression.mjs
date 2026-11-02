@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import http from 'node:http';
 let chromium;
 try { ({ chromium } = createRequire(resolve('package.json'))('playwright')); }
-catch (e) { ({ chromium } = createRequire(import.meta.url)('playwright')); }
+catch { ({ chromium } = createRequire(import.meta.url)('playwright')); }
 const DIST = resolve(process.argv[2] || 'dist/terraterm.html');
 const URL0 = pathToFileURL(DIST).href;
 const only = process.argv[3];
@@ -207,7 +207,7 @@ await run('I_systemShape', async () => {
       ask: async () => ({ text: 'x', sources: [], confidence: 0.5 }),
       system: async () => ({ asOf: Date.now(), mode: 'live', models: [{ name: 'A', role: 'reasoning', where: 'cloud', status: 'ok', latencyMs: 100 }] }),
     } };`;
-  const { ctx, p, errs } = await page(init, '#/desk');
+  const { ctx, errs } = await page(init, '#/desk');
   await wait(3500);
   await ctx.close();
   return { consoleErrorsIn3_5s: errs.length, sample: errs[0] && errs[0].split('\n')[0], bug: errs.length > 0 };

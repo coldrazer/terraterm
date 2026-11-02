@@ -81,7 +81,13 @@ def get_api_key() -> str:
 def get_base_url() -> str:
     if settings_store is not None:
         try:
-            return settings_store.get("sam_base_url").rstrip("/")
+            url = settings_store.get("sam_base_url").rstrip("/")
+            if settings_store.source_of("sam_base_url") == "file":
+                try:
+                    settings_store.validate_base_url("sam_base_url", url)
+                except ValueError:
+                    return DEFAULT_BASE_URL
+            return url
         except Exception:
             pass
     return os.environ.get("SAM_API_BASE_URL", DEFAULT_BASE_URL).rstrip("/")

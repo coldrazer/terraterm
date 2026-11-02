@@ -379,5 +379,47 @@ except ValueError:
     check(True, "settings: bad backend is rejected")
 _tmp_settings.unlink(missing_ok=True)
 
+# --------------------------------------------------------------------------
+print("\n[11] settings base-URL allowlist, EIA params encoding, CORS origins")
+# --------------------------------------------------------------------------
+import requests as _requests  # noqa: E402
+import provider_checks  # noqa: E402
+
+_tmp_settings2 = Path(tempfile.mkdtemp()) / "settings.local.json"
+settings_store.SETTINGS_PATH = _tmp_settings2
+settings_store._cache = {"mtime": None, "data": {}}
+for _bad in ("http://api.meta.ai/v1", "https://evil.example.com/v1", "https://api.meta.ai@evil.example.com/v1"):
+    try:
+        settings_store.set_many({"sam_base_url": _bad})
+        check(False, f"settings: base URL {_bad} is rejected")
+    except ValueError:
+        check(True, f"settings: base URL {_bad} is rejected")
+settings_store.set_many({"sam_base_url": "https://api.meta.ai/v1"})
+check(settings_store.get("sam_base_url") == "https://api.meta.ai/v1", "settings: allowlisted SAM base URL is accepted")
+settings_store.set_many({"baseten_base_url": "https://inference.baseten.co/v1"})
+check(settings_store.get("baseten_base_url") == "https://inference.baseten.co/v1", "settings: allowlisted Baseten base URL is accepted")
+settings_store.set_many({"sam_base_url": ""})
+check(settings_store.get("sam_base_url") == "https://api.meta.ai/v1", "settings: clearing base URL falls back to default")
+_tmp_settings2.unlink(missing_ok=True)
+
+_captured = {}
+
+
+def _stub_get_eia(url, params=None, timeout=None):
+    _captured.update(url=url, params=params)
+    return _StubRes(200, {"response": {"data": [{"value": 26970}]}})
+
+
+_orig_get = provider_checks.requests.get
+provider_checks.requests.get = _stub_get_eia
+_eia = provider_checks.check_eia("key-not-real", "W_EPC0_SAX_YCUOK_MBBL&length=99")
+provider_checks.requests.get = _orig_get
+check(_eia["ok"] is True, "eia: params-encoded test reports data")
+check(_captured["params"]["facets[series][]"] == "W_EPC0_SAX_YCUOK_MBBL&length=99", "eia: series travels as one param value, not injected params")
+_prepared = _requests.Request("GET", _captured["url"], params=_captured["params"]).prepare()
+check(_prepared.url.count("length=") == 1, "eia: prepared URL carries exactly one length param")
+
+check(server.ALLOWED_ORIGINS == ["http://localhost:5173", "http://127.0.0.1:5173"], "cors: default origins are the local page only")
+
 print("\n" + ("ALL CHECKS PASSED" if not failures else f"{len(failures)} FAILURE(S): " + "; ".join(failures)))
 sys.exit(1 if failures else 0)

@@ -39,6 +39,32 @@ KNOWN_KEYS: Dict[str, Any] = {
     "baseten_model": ("BASETEN_MODEL", "meta-models/muse-spark-open-1026", False),
 }
 
+# Base URLs are web-writable input (POST /api/settings), so a stored base
+# URL is never trusted blindly: writes through set_many must be https on
+# a known host, and callers re-validate file-sourced values before any
+# key is sent to them. Env-sourced values are the operator's own and pass
+# through. The file can only ever point at the real providers.
+ALLOWED_BASE_HOSTS = {
+    "sam_base_url": {"api.meta.ai"},
+    "baseten_base_url": {"inference.baseten.co"},
+}
+
+
+def validate_base_url(key: str, url: str) -> None:
+    """Raise ValueError unless url is https on the key's allowlisted host."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse((url or "").strip())
+    if parsed.scheme != "https" or parsed.hostname not in ALLOWED_BASE_HOSTS.get(key, set()):
+        raise ValueError(
+            f"{key} must be https on an allowlisted host ({sorted(ALLOWED_BASE_HOSTS.get(key, []))})"
+        )
+
+
+def source_of(key: str) -> str:
+    """Public wrapper for _source_of: 'env', 'file', or 'missing'."""
+    return _source_of(key)
+
 # mtime cache: the file is tiny and local, but the API path reads settings
 # on every call, so avoid re-reading when nothing changed.
 _cache: Dict[str, Any] = {"mtime": None, "data": {}}
@@ -109,6 +135,8 @@ def set_many(updates: Dict[str, Any]) -> Dict[str, Any]:
         value = value.strip()
         if key == "sam_backend" and value and value not in ("mock", "api"):
             raise ValueError("sam_backend must be 'mock' or 'api'")
+        if key in ALLOWED_BASE_HOSTS and value:
+            validate_base_url(key, value)
         if value:
             data[key] = value
         else:

@@ -5133,7 +5133,7 @@ button.kpi:hover { background: var(--raised); }
   const ALIASES = { '': 'desk', home: 'desk', f1: 'macro', f2: 'orbital', f3: 'agent', f4: 'flow', f5: 'commodities', f6: 'fx', f7: 'intel', f8: 'alerts', satellite: 'intel', sat: 'intel', system: 'desk' };
 
   /* ---------- frame ---------- */
-  const mark = () => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('width', '18'); s.setAttribute('height', '18'); s.setAttribute('viewBox', '0 0 18 18'); s.setAttribute('aria-hidden', 'true'); s.classList.add('amber'); s.innerHTML = '<rect x="1" y="1" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="9" cy="9" r="3.2" fill="currentColor"/><path d="M9 1.5v3M9 13.5v3M1.5 9h3M13.5 9h3" stroke="currentColor" stroke-width="1.5"/>'; return s; };
+  const mark = () => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('width', '18'); s.setAttribute('height', '18'); s.setAttribute('viewBox', '0 0 18 18'); s.setAttribute('aria-hidden', 'true'); s.classList.add('amber'); const el = (tag, attrs) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const k in attrs) e.setAttribute(k, attrs[k]); s.appendChild(e); return e; }; el('rect', { x: '1', y: '1', width: '16', height: '16', rx: '3', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.5' }); el('circle', { cx: '9', cy: '9', r: '3.2', fill: 'currentColor' }); el('path', { d: 'M9 1.5v3M9 13.5v3M1.5 9h3M13.5 9h3', stroke: 'currentColor', 'stroke-width': '1.5' }); return s; };
   const shell = (TT.shell = {});
 
   function buildFrame(root) {

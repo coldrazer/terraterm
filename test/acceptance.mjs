@@ -247,7 +247,7 @@ const askAndWait = async (page, text) => {
     await page.keyboard.press('p');
     const seen = new Set();
     for (let k = 0; k < 14; k++) { seen.add(await page.evaluate(() => TT.views.orbital.viewer.passIdx)); await page.waitForTimeout(300); }
-    const pressed = await page.getAttribute('#view-orbital .orb-ctl button[aria-pressed]:nth-of-type(3)', 'aria-pressed').catch(() => null);
+    const _pressed = await page.getAttribute('#view-orbital .orb-ctl button[aria-pressed]:nth-of-type(3)', 'aria-pressed').catch(() => null);
     await page.keyboard.press('p');
     const stopped = await page.evaluate(() => !TT.views.orbital.viewer.playing);
     await ctx.close();
@@ -421,7 +421,7 @@ const askAndWait = async (page, text) => {
   /* ===================== §8.8 Alerts ===================== */
   await check('8.8a', 'Alerts: new alert arrives with toast and status count; acknowledge clears both', async () => {
     const { ctx, page } = await open();
-    const n0 = Number(await page.textContent('.status .sb b:not(:empty) >> nth=-1').catch(() => '0')) || await page.evaluate(() => TT.app.activeAlerts().length);
+    const _n0 = Number(await page.textContent('.status .sb b:not(:empty) >> nth=-1').catch(() => '0')) || await page.evaluate(() => TT.app.activeAlerts().length);
     const c0 = await page.evaluate(() => TT.app.activeAlerts().length);
     await page.evaluate(() => window.TERRATERM.debug.fireScheduled());
     await page.waitForSelector('.toast[data-id="alert-al-port-anch"]', { timeout: 6000 });

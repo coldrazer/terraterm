@@ -35,7 +35,18 @@ def _setting(key: str, env_name: str, default: str) -> str:
 
 
 def get_base_url() -> str:
-    return _setting("baseten_base_url", "BASETEN_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
+    if settings_store is not None:
+        try:
+            url = settings_store.get("baseten_base_url").rstrip("/")
+            if settings_store.source_of("baseten_base_url") == "file":
+                try:
+                    settings_store.validate_base_url("baseten_base_url", url)
+                except ValueError:
+                    return DEFAULT_BASE_URL
+            return url
+        except Exception:
+            pass
+    return os.environ.get("BASETEN_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
 
 
 def get_model_id() -> str:

@@ -10,7 +10,7 @@ Setup (on a machine with an NVIDIA GPU -- upstream requires CUDA 12.6+):
     pip install -r requirements.txt
     pip install "git+https://github.com/facebookresearch/sam3.git"
     hf auth login                    # facebook/sam3.1 is gated: request access first
-    uvicorn server:app --host 0.0.0.0 --port 8000
+    uvicorn server:app --host 127.0.0.1 --port 8000
 
 The weights are pulled from the Hub on first use (facebook/sam3.1 ->
 sam3.1_multiplex.pt, ~6.5 GB) and cached in the usual HF cache directory.
@@ -30,21 +30,40 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import tempfile
-import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-import cv2
-import numpy as np
-import requests
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+
+import segmentation
+from segmentation import (
+    _api_segments,
+    pass_list,
+    polygonize,
+    run_sam31,
+    segment_pass,
+    stage_frames,
+    with_deltas,
+)
+from service_config import (
+    API_MODEL_NAME,
+    DEFAULT_THRESHOLD,
+    FRAME_STORE,
+    MODEL_NAME,
+    MODEL_VERSION,
+    backend_mode,
+)
+
+try:
+    import provider_checks
+except ImportError:  # service run without its own dir on sys.path
+    provider_checks = None
 
 try:
     import settings_store
@@ -54,86 +73,21 @@ except ImportError:  # service run without its own dir on sys.path
 HERE = Path(__file__).resolve().parent
 CATALOG_PATH = Path(os.environ.get("TERRATERM_SITES", HERE / "sites.json"))
 
-# Frames the service staged, served back over HTTP so the browser can load them
-# even when the source imagery was a local path rather than a URL.
-FRAME_STORE = Path(os.environ.get("SAM31_FRAME_STORE", Path(tempfile.gettempdir()) / "sam31-frames"))
-PUBLIC_BASE = os.environ.get("TERRATERM_PUBLIC_BASE", "http://127.0.0.1:8000").rstrip("/")
-FRAME_TTL_S = float(os.environ.get("SAM31_FRAME_TTL", "86400"))
-
-MODEL_NAME = "SAM 3.1 (Object Multiplex)"
-MODEL_VERSION = "facebook/sam3.1"
-API_MODEL_NAME = "SAM 3.1 (Meta Model API)"
-# Backend selection: "mock" (default, local/fake predictor, never spends API
-# calls) or "api" (hosted Meta Model API via api_client). UI work must never
-# accidentally spend calls or show mock data as live, hence mock by default.
-def backend_mode() -> str:
-    """Effective SAM backend: env SAM31_BACKEND, then Settings file, else mock.
-
-    Read per call so a Settings save applies without restarting the service.
-    """
-    env_val = os.environ.get("SAM31_BACKEND", "").strip().lower()
-    if env_val:
-        return env_val
-    if settings_store is not None:
-        try:
-            return settings_store.get("sam_backend")
-        except Exception:
-            pass
-    return "mock"
-DEFAULT_THRESHOLD = float(os.environ.get("SAM31_THRESHOLD", "0.5"))
-MAX_POLY_POINTS = int(os.environ.get("SAM31_MAX_POLY_POINTS", "48"))
-MATCH_IOU = float(os.environ.get("SAM31_MATCH_IOU", "0.30"))
-HTTP_TIMEOUT = float(os.environ.get("SAM31_HTTP_TIMEOUT", "60"))
-VALID_CLS = ("energy", "logistics", "maritime", "industrial")
+# CORS: the page is served by scripts/serve.mjs on localhost:5173 by
+# default. Anything else must opt in via TERRATERM_CORS_ORIGINS
+# (comma-separated origins). A wildcard here would let any website the
+# user visits call the settings routes, which can move saved keys.
+DEFAULT_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+_env_origins = os.environ.get("TERRATERM_CORS_ORIGINS", "").strip()
+ALLOWED_ORIGINS = [o.strip() for o in _env_origins.split(",") if o.strip()] or DEFAULT_ORIGINS
 
 app = FastAPI(title="TERRATERM SAM 3.1 service", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
-
-
-# --------------------------------------------------------------------------
-# model
-# --------------------------------------------------------------------------
-
-_predictor = None
-_predictor_error: Optional[str] = None
-_predictor_lock = threading.Lock()
-
-
-def _predictor_kwargs() -> Dict[str, Any]:
-    """FlashAttention 3 is CUDA-only; allow turning it off for other GPUs."""
-    kwargs: Dict[str, Any] = {}
-    use_fa3 = os.environ.get("SAM31_USE_FA3", "auto")
-    if use_fa3.lower() in ("0", "false", "no"):
-        kwargs["use_fa3"] = False
-    if os.environ.get("SAM31_MAX_NUM_OBJECTS"):
-        kwargs["max_num_objects"] = int(os.environ["SAM31_MAX_NUM_OBJECTS"])
-    if os.environ.get("SAM31_MULTIPLEX_COUNT"):
-        kwargs["multiplex_count"] = int(os.environ["SAM31_MULTIPLEX_COUNT"])
-    return kwargs
-
-
-def get_predictor():
-    """Build (once) and return the SAM 3.1 multiplex video predictor."""
-    global _predictor, _predictor_error
-    if _predictor is not None:
-        return _predictor
-    with _predictor_lock:
-        if _predictor is not None:
-            return _predictor
-        try:
-            from sam3.model_builder import build_sam3_multiplex_video_predictor
-
-            _predictor = build_sam3_multiplex_video_predictor(**_predictor_kwargs())
-            _predictor_error = None
-        except Exception as exc:  # pragma: no cover - surfaced through /health
-            _predictor_error = f"{type(exc).__name__}: {exc}"
-            raise
-    return _predictor
 
 
 # --------------------------------------------------------------------------
@@ -155,400 +109,6 @@ def site_config(site_id: str) -> Dict[str, Any]:
     return site
 
 
-def slug(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")[:24] or "seg"
-
-
-# --------------------------------------------------------------------------
-# geometry helpers
-# --------------------------------------------------------------------------
-
-
-def polygonize(mask: np.ndarray, max_points: int = MAX_POLY_POINTS) -> Tuple[List[List[float]], float]:
-    """Binary mask -> normalized polygon + pixel area.
-
-    TERRATERM normalizes x (and radii) by image width and y by image height,
-    so a pixel (col, row) becomes [col / width, row / height].
-    """
-    binary = mask.astype(np.uint8)
-    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
-        return [], 0.0
-    contour = max(contours, key=cv2.contourArea)
-    area_px = float(cv2.contourArea(contour))
-    if area_px <= 0:
-        return [], 0.0
-    eps = 0.002 * cv2.arcLength(contour, True)
-    approx = cv2.approxPolyDP(contour, eps, True)
-    while len(approx) > max_points:
-        eps *= 1.8
-        approx = cv2.approxPolyDP(contour, eps, True)
-    h, w = mask.shape[:2]
-    pts = [[round(float(p[0][0]) / w, 5), round(float(p[0][1]) / h, 5)] for p in approx]
-    return pts, area_px
-
-
-def mask_iou(a: np.ndarray, b: np.ndarray) -> float:
-    if a.shape != b.shape:
-        b = cv2.resize(b.astype(np.uint8), (a.shape[1], a.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
-    union = int(np.logical_or(a, b).sum())
-    if union == 0:
-        return 0.0
-    return float(np.logical_and(a, b).sum()) / float(union)
-
-
-# --------------------------------------------------------------------------
-# segment id registry -- keeps ids stable across passes so the drawer can
-# follow a segment while the user steps passes (CONTRACT.md, imagery()).
-# --------------------------------------------------------------------------
-
-
-class SegmentIds:
-    def __init__(self) -> None:
-        self._by_prompt: Dict[str, Dict[str, Any]] = {}
-
-    def resolve(self, prompt_text: str, objects: List[Dict[str, Any]]) -> Dict[int, str]:
-        """Map this frame's SAM object ids to TERRATERM segment ids.
-
-        Objects are matched to the previous frame by mask IoU; unmatched
-        objects get a fresh id.
-        """
-        slot = self._by_prompt.setdefault(prompt_text, {"next": 1, "prev": {}})
-        prev: Dict[int, Tuple[np.ndarray, str]] = slot["prev"]
-        assigned: Dict[int, str] = {}
-        claimed: set = set()
-        current: Dict[int, Tuple[np.ndarray, str]] = {}
-
-        for obj in objects:
-            best_id, best_iou = None, 0.0
-            for prev_obj_id, (ref_mask, seg_id) in prev.items():
-                if prev_obj_id in claimed:
-                    continue
-                iou = mask_iou(obj["mask"], ref_mask)
-                if iou > best_iou:
-                    best_iou, best_id = iou, seg_id
-            if best_id is not None and best_iou >= MATCH_IOU:
-                seg_id = best_id
-            else:
-                seg_id = f"sam31-{slug(prompt_text)}-{slot['next']}"
-                slot["next"] += 1
-            assigned[obj["obj_id"]] = seg_id
-            current[obj["obj_id"]] = (obj["mask"], seg_id)
-
-        slot["prev"] = current
-        return assigned
-
-
-_id_registry = SegmentIds()
-
-
-# --------------------------------------------------------------------------
-# inference
-# --------------------------------------------------------------------------
-
-
-def _parse_outputs(out: Dict[str, Any], threshold: float) -> List[Dict[str, Any]]:
-    """Turn a SAM 3.1 frame output into a list of detections."""
-    masks = out.get("out_binary_masks")
-    if masks is None:
-        return []
-    obj_ids = out.get("out_obj_ids")
-    probs = out.get("out_probs")
-    boxes = out.get("out_boxes_xywh")
-    n = len(obj_ids) if obj_ids is not None else len(masks)
-    out_list: List[Dict[str, Any]] = []
-    for i in range(n):
-        score = float(probs[i]) if probs is not None and i < len(probs) else 1.0
-        if score < threshold:
-            continue
-        mask = np.asarray(masks[i]).astype(bool)
-        if not mask.any():
-            continue
-        out_list.append(
-            {
-                "obj_id": int(obj_ids[i]) if obj_ids is not None else i,
-                "score": round(score, 4),
-                "mask": mask,
-                "box": [float(v) for v in boxes[i]] if boxes is not None and i < len(boxes) else None,
-            }
-        )
-    return out_list
-
-
-def run_sam31(
-    frame_paths: List[Path],
-    prompts: List[Dict[str, Any]],
-    threshold: float = DEFAULT_THRESHOLD,
-) -> Dict[int, Dict[str, List[Dict[str, Any]]]]:
-    """Run SAM 3.1 over a staged frame folder.
-
-    Returns {frame_index: {prompt_text: [detections]}}. The folder must contain
-    JPEGs named <frame_index>.jpg, which is what SAM 3.1 expects.
-    """
-    predictor = get_predictor()
-    resource = str(frame_paths[0].parent)
-    resp = predictor.handle_request(request=dict(type="start_session", resource_path=resource))
-    session_id = resp["session_id"]
-
-    per_frame: Dict[int, Dict[str, List[Dict[str, Any]]]] = {}
-    try:
-        for index, prompt in enumerate(prompts):
-            # SAM 3.1 needs a reset before switching to a different text prompt.
-            if index > 0:
-                predictor.handle_request(request=dict(type="reset_session", session_id=session_id))
-            added = predictor.handle_request(
-                request=dict(
-                    type="add_prompt",
-                    session_id=session_id,
-                    frame_index=0,
-                    text=prompt["text"],
-                )
-            )
-            if len(frame_paths) == 1:
-                per_frame.setdefault(0, {})[prompt["text"]] = _parse_outputs(added["outputs"], threshold)
-            else:
-                for item in predictor.handle_stream_request(
-                    request=dict(type="propagate_in_video", session_id=session_id)
-                ):
-                    fi = int(item["frame_index"])
-                    per_frame.setdefault(fi, {})[prompt["text"]] = _parse_outputs(item["outputs"], threshold)
-    finally:
-        try:
-            predictor.handle_request(request=dict(type="reset_session", session_id=session_id))
-        except Exception:
-            pass
-    return per_frame
-
-
-def stage_frames(urls: List[str], workdir: Path) -> Tuple[List[Path], List[Tuple[int, int]]]:
-    """Download images into <frame_index>.jpg files; return paths + sizes."""
-    paths: List[Path] = []
-    sizes: List[Tuple[int, int]] = []
-    workdir.mkdir(parents=True, exist_ok=True)
-    for i, url in enumerate(urls):
-        dest = workdir / f"{i:05d}.jpg"
-        if not dest.exists():
-            if url.startswith("http://") or url.startswith("https://"):
-                res = requests.get(url, timeout=HTTP_TIMEOUT)
-                res.raise_for_status()
-                dest.write_bytes(res.content)
-            else:
-                src = Path(url)
-                if not src.exists():
-                    raise HTTPException(status_code=400, detail=f"image not found: {url}")
-                shutil.copyfile(src, dest)
-        img = cv2.imread(str(dest))
-        if img is None:
-            raise HTTPException(status_code=400, detail=f"unreadable image: {url}")
-        paths.append(dest)
-        sizes.append((img.shape[1], img.shape[0]))
-    return paths, sizes
-
-
-def sweep_frames() -> None:
-    """Drop frame folders older than FRAME_TTL_S."""
-    if not FRAME_STORE.exists():
-        return
-    cutoff = time.time() - FRAME_TTL_S
-    for site_dir in FRAME_STORE.iterdir():
-        if not site_dir.is_dir():
-            continue
-        for pass_dir in site_dir.iterdir():
-            try:
-                if pass_dir.stat().st_mtime < cutoff:
-                    shutil.rmtree(pass_dir, ignore_errors=True)
-            except OSError:
-                pass
-
-
-def browser_url(source: str, site_id: str, pass_id: str) -> str:
-    """A URL the browser can actually load for the pass image."""
-    if source.startswith("http://") or source.startswith("https://"):
-        return source
-    return f"{PUBLIC_BASE}/frames/{site_id}/{pass_id}/00000.jpg"
-
-
-
-# --------------------------------------------------------------------------
-# segmentation cache
-# --------------------------------------------------------------------------
-
-_cache: Dict[str, Dict[str, Any]] = {}
-_cache_lock = threading.Lock()
-CACHE_TTL_S = float(os.environ.get("SAM31_CACHE_TTL", "900"))
-
-
-def cache_get(key: str) -> Optional[Dict[str, Any]]:
-    with _cache_lock:
-        entry = _cache.get(key)
-    if not entry:
-        return None
-    if time.time() - entry["at"] > CACHE_TTL_S:
-        return None
-    return entry["value"]
-
-
-def cache_put(key: str, value: Dict[str, Any]) -> None:
-    with _cache_lock:
-        _cache[key] = {"at": time.time(), "value": value}
-
-
-# --------------------------------------------------------------------------
-# TERRATERM payload assembly
-# --------------------------------------------------------------------------
-
-
-def build_segments(
-    site_id: str,
-    site: Dict[str, Any],
-    prompt_specs: List[Dict[str, Any]],
-    per_frame: Dict[int, Dict[str, List[Dict[str, Any]]]],
-    frame_index: int,
-    gsd: float,
-    threshold: float,
-    sizes: Dict[int, Tuple[int, int]],
-) -> List[Dict[str, Any]]:
-    """Map SAM detections to TERRATERM Segment objects."""
-    segments: List[Dict[str, Any]] = []
-    frame_masks = per_frame.get(frame_index, {})
-    width, height = sizes.get(frame_index, (0, 0))
-    frame_px = max(width * height, 1)
-
-    for spec in prompt_specs:
-        text = spec["text"]
-        objects = frame_masks.get(text, [])
-        ids = _id_registry.resolve(text, objects)
-        for obj in objects:
-            pts, area_px = polygonize(obj["mask"])
-            if not pts:
-                continue
-            area_m2 = area_px * gsd * gsd
-            seg_id = ids.get(obj["obj_id"], f"sam31-{slug(text)}-{obj['obj_id']}")
-            segments.append(
-                {
-                    "id": seg_id,
-                    "label": f"{spec.get('label') or text.upper()} {obj['obj_id'] + 1}",
-                    "cls": spec.get("cls") if spec.get("cls") in VALID_CLS else "industrial",
-                    "hud": bool(spec.get("hud", area_px / frame_px > 0.005)),
-                    "conf": obj["score"],
-                    "geom": {"t": "poly", "pts": pts},
-                    "area_m2": round(area_m2, 1),
-                    "metric": {
-                        "name": "Segment area",
-                        "value": round(area_m2, 1),
-                        "unit": " m²",
-                        "prior": None,
-                        "delta": None,
-                        "deltaUnit": " m²",
-                        "digits": 0,
-                    },
-                    "rule": (
-                        f'SAM 3.1 concept segmentation · prompt "{text}" · '
-                        f"mask score >= {threshold:.2f}"
-                    ),
-                }
-            )
-    return segments
-
-
-def _api_segments(site_id: str, site: Dict[str, Any], urls: List[str], gsd: float, sizes_list: List[Tuple[int, int]]) -> List[Dict[str, Any]]:
-    """Live segments via the Meta Model API. Errors surface; no mock fallback."""
-    import api_client
-
-    segments: List[Dict[str, Any]] = []
-    for fi, url in enumerate(urls):
-        width, height = sizes_list[fi]
-        try:
-            detections, _skipped = api_client.segment_image_via_api(url, width, height, gsd, site)
-        except api_client.SamApiError as exc:
-            raise HTTPException(status_code=502, detail=f"SAM API failed: {exc}") from None
-        for n, det in enumerate(detections):
-            segments.append(
-                {
-                    "id": f"sam31-api-{n + 1}",
-                    "label": f"{det.get('label') or 'TK'} {n + 1}",
-                    "cls": det.get("cls", "energy"),
-                    "hud": True,
-                    "conf": det["confidence"],
-                    "geom": {"t": "poly", "pts": det["polygon"]},
-                    "area_m2": det["area_m2"],
-                    "metric": {
-                        "name": "Segment area",
-                        "value": det["area_m2"],
-                        "unit": " m²",
-                        "prior": None,
-                        "delta": None,
-                        "deltaUnit": " m²",
-                        "digits": 0,
-                    },
-                    "rule": f'SAM 3.1 Meta Model API · prompt "{det.get("prompt", "")}"',
-                }
-            )
-    return segments
-
-
-def segment_pass(site_id: str, site: Dict[str, Any], pass_meta: Dict[str, Any]) -> Dict[str, Any]:
-    """Run (or reuse) segmentation for one pass and return its TERRATERM Pass."""
-    key = f"{site_id}|{pass_meta['id']}|{backend_mode()}"
-    cached = cache_get(key)
-    if cached:
-        return cached
-
-    prompt_specs = site.get("prompts") or []
-    if not prompt_specs:
-        raise HTTPException(status_code=500, detail=f"site {site_id} has no prompts configured")
-
-    gsd = float(site.get("gsd", 0.5))
-    threshold = float(site.get("threshold", DEFAULT_THRESHOLD))
-    urls = pass_meta.get("images") or []
-    if not urls:
-        raise HTTPException(status_code=500, detail=f"pass {pass_meta['id']} has no images")
-
-    sweep_frames()
-    frame_dir = FRAME_STORE / site_id / str(pass_meta["id"])
-    frame_paths, sizes_list = stage_frames(urls, frame_dir)
-    if backend_mode() == "api":
-        segments = _api_segments(site_id, site, urls, gsd, sizes_list)
-        model_label = API_MODEL_NAME
-    elif backend_mode() == "mock":
-        per_frame = run_sam31(frame_paths, prompt_specs, threshold)
-        sizes = {i: s for i, s in enumerate(sizes_list)}
-        segments = []
-        for fi in range(len(frame_paths)):
-            segments.extend(build_segments(site_id, site, prompt_specs, per_frame, fi, gsd, threshold, sizes))
-        model_label = MODEL_NAME
-    else:
-        raise HTTPException(status_code=500, detail=f"unknown SAM31_BACKEND: {backend_mode()} (expected api or mock)")
-
-    payload = {
-        "id": pass_meta["id"],
-        "i": pass_meta.get("i", 0),
-        "ts": pass_meta["ts"],
-        "sensor": site.get("sensor", "SAT VHR"),
-        "gsd": gsd,
-        "model": model_label,
-        "imageUrl": browser_url(urls[0], site_id, str(pass_meta["id"])),
-        "segments": segments,
-    }
-    cache_put(key, payload)
-    return payload
-
-
-def with_deltas(pass_payload: Dict[str, Any], prior_payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    """Fill metric.prior / metric.delta from the prior pass's areas."""
-    if not prior_payload:
-        return pass_payload
-    prior_area = {s["id"]: s["area_m2"] for s in prior_payload.get("segments", [])}
-    for seg in pass_payload.get("segments", []):
-        prev = prior_area.get(seg["id"])
-        seg["metric"]["prior"] = prev
-        seg["metric"]["delta"] = round(seg["area_m2"] - prev, 1) if prev is not None else None
-    return pass_payload
-
-
-def pass_list(site: Dict[str, Any]) -> List[Dict[str, Any]]:
-    passes = site.get("passes") or []
-    return [{"id": p["id"], "i": i, "ts": p["ts"]} for i, p in enumerate(passes)]
 
 
 # --------------------------------------------------------------------------
@@ -574,24 +134,24 @@ class SegmentRequest(BaseModel):
 
 @app.get("/health")
 def health() -> Dict[str, Any]:
-    loaded = _predictor is not None
+    loaded = segmentation._predictor is not None
     if backend_mode() == "api":
         return {
-            "ok": not _predictor_error,
+            "ok": not segmentation._predictor_error,
             "model": API_MODEL_NAME,
             "checkpoint": MODEL_VERSION,
             "backend": "api",
             "loaded": True,
-            "error": _predictor_error,
+            "error": segmentation._predictor_error,
             "threshold": DEFAULT_THRESHOLD,
         }
     return {
-        "ok": loaded and not _predictor_error,
+        "ok": loaded and not segmentation._predictor_error,
         "model": MODEL_NAME,
         "checkpoint": MODEL_VERSION,
         "backend": backend_mode(),
         "loaded": loaded,
-        "error": _predictor_error,
+        "error": segmentation._predictor_error,
         "threshold": DEFAULT_THRESHOLD,
     }
 
@@ -772,7 +332,7 @@ def system() -> Dict[str, Any]:
                 "name": MODEL_NAME,
                 "role": "segmentation",
                 "where": MODEL_VERSION,
-                "status": "ready" if _predictor is not None else "loading",
+                "status": "ready" if segmentation._predictor is not None else "loading",
                 "latencyMs": 0,
             }
         ],
@@ -836,69 +396,53 @@ def api_settings_save(body: SettingsSave) -> Dict[str, Any]:
 def api_settings_test(body: SettingsTest) -> Dict[str, Any]:
     """Verify one provider's key. Uses the value transiently; never stores it."""
     store = _require_store()
+    if provider_checks is None:
+        raise HTTPException(status_code=500, detail="provider checks unavailable")
     provider = (body.provider or "").strip().lower()
-    timeout = 30
     if provider == "sam":
         key = (body.key or "").strip() or store.get_secret("sam_api_key")
         if not key:
             raise HTTPException(status_code=409, detail="SAM key is not configured")
         base = store.get("sam_base_url").rstrip("/")
-        try:
-            res = requests.get(f"{base}/models", headers={"Authorization": f"Bearer {key}"}, timeout=timeout)
-        except Exception as exc:
-            return {"provider": provider, "ok": False, "detail": f"request failed: {type(exc).__name__}"}
-        if res.status_code != 200:
-            return {"provider": provider, "ok": False, "detail": f"HTTP {res.status_code}"}
-        try:
-            ids = [m.get("id", "") for m in res.json().get("data", [])]
-        except Exception:
-            ids = []
-        listed = "sam-3.1" in ids
-        return {"provider": provider, "ok": True, "detail": "connected; sam-3.1 listed" if listed else "connected; sam-3.1 not in model list"}
-    if provider == "eia":
+        _check_base_url(store, "sam_base_url", base)
+        result = provider_checks.check_sam(key, base)
+    elif provider == "eia":
         key = (body.key or "").strip() or store.get_secret("eia_api_key")
         if not key:
             raise HTTPException(status_code=409, detail="EIA key is not configured")
-        series = store.get("eia_series")
-        url = ("https://api.eia.gov/v2/petroleum/stoc/wstk/data/?api_key=" + key
-               + "&facets[series][]=" + series + "&length=1")
-        try:
-            res = requests.get(url, timeout=timeout)
-        except Exception as exc:
-            return {"provider": provider, "ok": False, "detail": f"request failed: {type(exc).__name__}"}
-        if res.status_code != 200:
-            return {"provider": provider, "ok": False, "detail": f"HTTP {res.status_code}"}
-        try:
-            rows = res.json().get("response", {}).get("data", [])
-        except Exception:
-            rows = []
-        return {"provider": provider, "ok": bool(rows), "detail": f"series {series} returned data" if rows else f"series {series} returned no rows"}
-    if provider == "copernicus":
+        result = provider_checks.check_eia(key, store.get("eia_series"))
+    elif provider == "copernicus":
         user = (body.username or "").strip() or store.get("copernicus_user")
         pw = (body.password or "").strip() or store.get_secret("copernicus_password")
         if not user or not pw:
             raise HTTPException(status_code=409, detail="Copernicus user/password are not configured")
-        try:
-            res = requests.post(
-                "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token",
-                data={"grant_type": "password", "client_id": "cdse-public", "username": user, "password": pw},
-                timeout=timeout,
-            )
-        except Exception as exc:
-            return {"provider": provider, "ok": False, "detail": f"request failed: {type(exc).__name__}"}
-        if res.status_code != 200:
-            return {"provider": provider, "ok": False, "detail": f"HTTP {res.status_code}"}
-        return {"provider": provider, "ok": True, "detail": "credentials accepted (token not stored)"}
-    if provider == "baseten":
+        result = provider_checks.check_copernicus(user, pw)
+    elif provider == "baseten":
         key = (body.key or "").strip() or store.get_secret("baseten_api_key")
         if not key:
             raise HTTPException(status_code=409, detail="Baseten key is not configured")
         base = store.get("baseten_base_url").rstrip("/")
-        try:
-            res = requests.get(f"{base}/models", headers={"Authorization": f"Api-Key {key}"}, timeout=timeout)
-        except Exception as exc:
-            return {"provider": provider, "ok": False, "detail": f"request failed: {type(exc).__name__}"}
-        if res.status_code != 200:
-            return {"provider": provider, "ok": False, "detail": f"HTTP {res.status_code}"}
-        return {"provider": provider, "ok": True, "detail": "connected"}
-    raise HTTPException(status_code=400, detail=f"unknown provider: {provider} (expected sam, eia, copernicus, baseten)")
+        _check_base_url(store, "baseten_base_url", base)
+        result = provider_checks.check_baseten(key, base)
+    else:
+        raise HTTPException(status_code=400, detail=f"unknown provider: {provider} (expected sam, eia, copernicus, baseten)")
+    return {"provider": provider, **result}
+
+
+def _check_base_url(store: Any, key: str, base: str) -> None:
+    """Reject a file-sourced base URL that fails the allowlist.
+
+    The settings file is web-writable input, so a value from it must be
+    https on a known host before any key is sent to it. Env-sourced
+    values are the operator's own and pass through.
+    """
+    try:
+        source = store.source_of(key)
+    except AttributeError:
+        return
+    if source != "file":
+        return
+    try:
+        store.validate_base_url(key, base)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
