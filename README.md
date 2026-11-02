@@ -6,7 +6,7 @@ TERRATERM follows crude oil two ways at once. It tracks prices and market news, 
 
 Built with Meta AI tooling: Muse Wonder for the model, SAM 3.1 for spotting tanks, and Muse Spark for checking the work.
 
-![License: Proprietary](https://img.shields.io/badge/license-proprietary-red) ![Version](https://img.shields.io/badge/version-0.2.0-amber) ![Tests](https://img.shields.io/badge/tests-63%2F63%20%2B%2017%2F17-brightgreen) ![CI](https://github.com/coldrazer/terraterm/actions/workflows/ci.yml/badge.svg) ![Dependencies](https://img.shields.io/badge/runtime%20dependencies-0-blue)
+![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue) ![Version](https://img.shields.io/badge/version-0.2.0-amber) ![Tests](https://img.shields.io/badge/tests-63%2F63%20%2B%2017%2F17-brightgreen) ![CI](https://github.com/coldrazer/terraterm/actions/workflows/ci.yml/badge.svg) ![Dependencies](https://img.shields.io/badge/runtime%20dependencies-0-blue)
 
 ![TERRATERM desk: watchlist, orbital imagery, agent, capital flow, timeline, and system in one frame](docs/screenshots/desk.png)
 
@@ -86,4 +86,4 @@ Latest verified run: **63/63 acceptance + 17/17 probes, Chromium 156** (report i
 
 ## License
 
-**Proprietary — all rights reserved.** This is not open-source software. No use, copying, modification, or distribution is permitted without a prior signed written license from the copyright holder. See [LICENSE](LICENSE) for the strict terms.
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for the full terms. Copyright 2026 Apex Studio LLC.
