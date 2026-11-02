@@ -304,8 +304,12 @@ def imagery(site_id: str, pass_id: Optional[str] = Query(default=None, alias="pa
 
     idx = len(passes) - 1
     if pass_id is not None:
+        try:
+            pass_idx = int(pass_id)
+        except (TypeError, ValueError):
+            pass_idx = None
         found = next(
-            (i for i, p in enumerate(passes) if p["id"] == pass_id or p.get("i") == int(pass_id)),
+            (i for i, p in enumerate(passes) if p["id"] == pass_id or (pass_idx is not None and p.get("i") == pass_idx)),
             None,
         )
         if found is None:

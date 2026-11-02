@@ -5,6 +5,8 @@ assembly. No FastAPI routes here; server.py owns the HTTP layer.
 
 from __future__ import annotations
 
+import copy
+import json
 import os
 import re
 import shutil
@@ -12,6 +14,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote_plus
 
 import cv2
 import numpy as np
@@ -291,25 +294,87 @@ def browser_url(source: str, site_id: str, pass_id: str) -> str:
 # --------------------------------------------------------------------------
 # segmentation cache
 # --------------------------------------------------------------------------
+# A past satellite pass never changes, so its segmentation is cached
+# permanently: in memory, and on disk under SEGMENT_CACHE_DIR so it
+# survives restarts. Only the newest pass of a site keeps a TTL, because
+# that slot is where a new pass appears. The TTL decision is made at read
+# time from the current catalog, so a pass that stops being newest
+# becomes permanent automatically. A per key lock makes concurrent
+# misses wait for one SAM call instead of each making their own.
 
 _cache: Dict[str, Dict[str, Any]] = {}
 _cache_lock = threading.Lock()
 CACHE_TTL_S = float(os.environ.get("SAM31_CACHE_TTL", "900"))
+SEGMENT_CACHE_DIR = Path(os.environ.get("SAM31_SEGMENT_CACHE", Path(__file__).resolve().parent / ".segment-cache"))
+_key_locks: Dict[str, threading.Lock] = {}
 
 
-def cache_get(key: str) -> Optional[Dict[str, Any]]:
+def _key_lock(key: str) -> threading.Lock:
+    with _cache_lock:
+        lock = _key_locks.get(key)
+        if lock is None:
+            lock = _key_locks[key] = threading.Lock()
+        return lock
+
+
+def _is_past_pass(site: Dict[str, Any], pass_meta: Dict[str, Any]) -> bool:
+    passes = site.get("passes") or []
+    if not passes:
+        return False
+    ids = {p.get("id") for p in passes}
+    newest = passes[-1].get("id")
+    return pass_meta.get("id") in ids and pass_meta.get("id") != newest
+
+
+def cache_get(key: str, permanent: bool = False) -> Optional[Dict[str, Any]]:
     with _cache_lock:
         entry = _cache.get(key)
     if not entry:
         return None
-    if time.time() - entry["at"] > CACHE_TTL_S:
+    if not permanent and time.time() - entry["at"] > CACHE_TTL_S:
         return None
-    return entry["value"]
+    return copy.deepcopy(entry["value"])
 
 
 def cache_put(key: str, value: Dict[str, Any]) -> None:
     with _cache_lock:
-        _cache[key] = {"at": time.time(), "value": value}
+        _cache[key] = {"at": time.time(), "value": copy.deepcopy(value)}
+
+
+def _json_default(obj: Any) -> Any:
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    raise TypeError(f"not JSON serializable: {type(obj)!r}")
+
+
+def _disk_path(key: str) -> Path:
+    return SEGMENT_CACHE_DIR / (quote_plus(key) + ".json")
+
+
+def _disk_get(key: str, permanent: bool) -> Optional[Dict[str, Any]]:
+    try:
+        entry = json.loads(_disk_path(key).read_text())
+    except Exception:
+        return None
+    if not permanent and time.time() - entry.get("at", 0) > CACHE_TTL_S:
+        return None
+    return copy.deepcopy(entry.get("value"))
+
+
+def _disk_put(key: str, value: Dict[str, Any]) -> None:
+    try:
+        SEGMENT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = SEGMENT_CACHE_DIR / (quote_plus(key) + ".tmp")
+        tmp.write_text(json.dumps({"at": time.time(), "value": value}, default=_json_default))
+        os.replace(tmp, _disk_path(key))
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------
@@ -407,11 +472,28 @@ def _api_segments(site_id: str, site: Dict[str, Any], urls: List[str], gsd: floa
 
 
 def segment_pass(site_id: str, site: Dict[str, Any], pass_meta: Dict[str, Any]) -> Dict[str, Any]:
-    """Run (or reuse) segmentation for one pass and return its TERRATERM Pass."""
+    """Run (or reuse) segmentation for one pass and return its TERRATERM Pass.
+
+    The cache never hands out a shared object: callers (with_deltas)
+    mutate the payload they receive, so every return is a fresh copy
+    and the stored entry stays pristine. That matters now that past
+    passes are cached permanently; a mutated entry would stay wrong.
+    """
     key = f"{site_id}|{pass_meta['id']}|{backend_mode()}"
-    cached = cache_get(key)
-    if cached:
-        return cached
+    permanent = _is_past_pass(site, pass_meta)
+    with _key_lock(key):
+        cached = cache_get(key, permanent=permanent)
+        if cached:
+            return cached
+        on_disk = _disk_get(key, permanent=permanent)
+        if on_disk is not None:
+            cache_put(key, on_disk)
+            return on_disk
+        return _segment_pass_compute(site_id, site, pass_meta, key)
+
+
+def _segment_pass_compute(site_id: str, site: Dict[str, Any], pass_meta: Dict[str, Any], key: str) -> Dict[str, Any]:
+    """Compute one pass segmentation and store it in both caches."""
 
     prompt_specs = site.get("prompts") or []
     if not prompt_specs:
@@ -450,6 +532,7 @@ def segment_pass(site_id: str, site: Dict[str, Any], pass_meta: Dict[str, Any]) 
         "segments": segments,
     }
     cache_put(key, payload)
+    _disk_put(key, payload)
     return payload
 
 

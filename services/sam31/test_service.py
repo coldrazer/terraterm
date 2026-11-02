@@ -91,6 +91,9 @@ sys.path.insert(0, str(HERE))
 # this suite. Production defaults do not include it.
 os.environ["TERRATERM_ALLOWED_HOSTS"] = "localhost,127.0.0.1,testserver"
 
+# Keep the segment disk cache out of the repo checkout during tests.
+os.environ["SAM31_SEGMENT_CACHE"] = tempfile.mkdtemp(prefix="sam31-segcache-")
+
 import server  # noqa: E402  (imported after the stub is installed)
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -436,6 +439,52 @@ _evil = TestClient(server.app, base_url="http://evil.example.com")
 check(_evil.get("/health").status_code == 400, "host: rebinding domain is rejected on reads")
 check(_evil.post("/api/settings", json={}).status_code == 400, "host: rebinding domain is rejected on settings writes")
 check(server.ALLOWED_HOSTS == ["localhost", "127.0.0.1", "testserver"], "host: allowlist is local names plus the suite host")
+
+print("\n[13] past pass cache permanence, per key lock, pass lookup")
+# --------------------------------------------------------------------------
+import threading  # noqa: E402
+import time  # noqa: E402
+
+import segmentation  # noqa: E402
+
+_seg_key = "ela-segundo-tanks|p1|mock"
+_seg_val = {"id": "p1", "segments": []}
+segmentation.cache_put(_seg_key, _seg_val)
+segmentation._cache[_seg_key]["at"] = 0.0
+check(segmentation.cache_get(_seg_key, permanent=True) == _seg_val, "cache: past pass entry survives past TTL")
+check(segmentation.cache_get(_seg_key, permanent=False) is None, "cache: newest pass entry expires past TTL")
+_disk_key = "ela-segundo-tanks|p1|mock-disk"
+segmentation._disk_put(_disk_key, _seg_val)
+segmentation._cache.pop(_disk_key, None)
+check(segmentation._disk_get(_disk_key, permanent=True) == _seg_val, "cache: disk round trip serves a past pass")
+check(client.get("/imagery/ela-segundo-tanks", params={"pass": "abc"}).status_code == 404, "imagery: non numeric pass returns 404, not 500")
+check(client.get("/imagery/ela-segundo-tanks", params={"pass": "99"}).status_code == 404, "imagery: unknown numeric pass returns 404")
+
+_calls = []
+_orig_api = segmentation._api_segments
+
+
+def _slow_api(site_id, site, urls, gsd, sizes_list):
+    _calls.append(1)
+    time.sleep(0.2)
+    return []
+
+
+segmentation._api_segments = _slow_api
+_prev_backend = os.environ.pop("SAM31_BACKEND", None)
+os.environ["SAM31_BACKEND"] = "api"
+_lock_site = catalog["sites"]["ela-segundo-tanks"]
+_lock_pass = dict(_lock_site["passes"][1], i=1)
+_threads = [threading.Thread(target=lambda: segmentation.segment_pass("ela-segundo-tanks", _lock_site, _lock_pass)) for _ in range(5)]
+for _t in _threads:
+    _t.start()
+for _t in _threads:
+    _t.join()
+check(len(_calls) == 1, "cache: five concurrent misses make exactly one SAM call")
+segmentation._api_segments = _orig_api
+os.environ.pop("SAM31_BACKEND", None)
+if _prev_backend is not None:
+    os.environ["SAM31_BACKEND"] = _prev_backend
 
 print("\n" + ("ALL CHECKS PASSED" if not failures else f"{len(failures)} FAILURE(S): " + "; ".join(failures)))
 sys.exit(1 if failures else 0)
