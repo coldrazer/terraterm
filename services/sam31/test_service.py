@@ -87,6 +87,10 @@ def install_fake_sam():
 install_fake_sam()
 sys.path.insert(0, str(HERE))
 
+# TestClient sends Host: testserver, so the Host check must allow it in
+# this suite. Production defaults do not include it.
+os.environ["TERRATERM_ALLOWED_HOSTS"] = "localhost,127.0.0.1,testserver"
+
 import server  # noqa: E402  (imported after the stub is installed)
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -420,6 +424,18 @@ _prepared = _requests.Request("GET", _captured["url"], params=_captured["params"
 check(_prepared.url.count("length=") == 1, "eia: prepared URL carries exactly one length param")
 
 check(server.ALLOWED_ORIGINS == ["http://localhost:5173", "http://127.0.0.1:5173"], "cors: default origins are the local page only")
+
+print("\n[12] Host header check (DNS rebinding)")
+# --------------------------------------------------------------------------
+_local = TestClient(server.app, base_url="http://localhost:8000")
+check(_local.get("/health").status_code == 200, "host: localhost is allowed")
+_loopback = TestClient(server.app, base_url="http://127.0.0.1:8000")
+check(_loopback.get("/health").status_code == 200, "host: 127.0.0.1 is allowed")
+check(client.get("/health").status_code == 200, "host: testserver is allowed in this suite")
+_evil = TestClient(server.app, base_url="http://evil.example.com")
+check(_evil.get("/health").status_code == 400, "host: rebinding domain is rejected on reads")
+check(_evil.post("/api/settings", json={}).status_code == 400, "host: rebinding domain is rejected on settings writes")
+check(server.ALLOWED_HOSTS == ["localhost", "127.0.0.1", "testserver"], "host: allowlist is local names plus the suite host")
 
 print("\n" + ("ALL CHECKS PASSED" if not failures else f"{len(failures)} FAILURE(S): " + "; ".join(failures)))
 sys.exit(1 if failures else 0)

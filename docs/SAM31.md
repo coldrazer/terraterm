@@ -94,7 +94,12 @@ only allows the local serve.mjs origin (localhost:5173) by default, with
 an opt-in override via TERRATERM_CORS_ORIGINS. Base URLs saved through
 Settings must be https on a known host (api.meta.ai for SAM,
 inference.baseten.co for Baseten); anything else is rejected, so a saved
-key can never be sent to an arbitrary server.
+key can never be sent to an arbitrary server. The Host header is checked
+too: only localhost and 127.0.0.1 are accepted by default, so a hostile
+page that rebinds its own domain to 127.0.0.1 still cannot call the
+service, because its Host header names the attacker's domain. A public
+host opts in through TERRATERM_ALLOWED_HOSTS (comma separated hostnames,
+no ports), e.g. the demo hostname on AWS.
 
 The weights download automatically on first use: `build_sam3_multiplex_video_predictor()`
 calls `hf_hub_download(repo_id="facebook/sam3.1", filename="sam3.1_multiplex.pt")`.

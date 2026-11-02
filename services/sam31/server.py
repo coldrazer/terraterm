@@ -38,6 +38,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -81,12 +82,26 @@ DEFAULT_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 _env_origins = os.environ.get("TERRATERM_CORS_ORIGINS", "").strip()
 ALLOWED_ORIGINS = [o.strip() for o in _env_origins.split(",") if o.strip()] or DEFAULT_ORIGINS
 
+# Host: a hostile page can rebind its own domain to 127.0.0.1, which
+# makes its requests same origin so CORS never applies. The Host header
+# still names the attacker's domain, so reject anything but the local
+# names here. A public host (the AWS demo) opts in through
+# TERRATERM_ALLOWED_HOSTS (comma separated hostnames, no ports).
+DEFAULT_HOSTS = ["localhost", "127.0.0.1"]
+_env_hosts = os.environ.get("TERRATERM_ALLOWED_HOSTS", "").strip()
+ALLOWED_HOSTS = [h.strip() for h in _env_hosts.split(",") if h.strip()] or DEFAULT_HOSTS
+
 app = FastAPI(title="TERRATERM SAM 3.1 service", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
+)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=ALLOWED_HOSTS,
+    www_redirect=False,
 )
 
 
